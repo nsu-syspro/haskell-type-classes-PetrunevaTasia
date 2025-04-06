@@ -25,6 +25,12 @@ data IntOp = Add | Mul | Sub
 
 -- * Parsing
 
+instance Parse IntOp where
+  parse "+" = Just Add
+  parse "*" = Just Mul
+  parse "-" = Just Sub
+  parse _   = Nothing 
+
 -- | Parses given expression in Reverse Polish Notation
 -- wrapped in 'Maybe' with 'Nothing' indicating failure to parse
 --
@@ -42,7 +48,20 @@ data IntOp = Add | Mul | Sub
 -- Nothing
 --
 instance (Parse a, Parse op) => Parse (Expr a op) where
-  parse = error "TODO: define parse (Parse (Expr a op))"
+  parse [] = Nothing
+  parse list = parseR (words list) []
+
+parseR :: (Parse a, Parse op) => [String] -> [Expr a op] -> Maybe (Expr a op)
+parseR [] [expr] = Just expr
+parseR [] _ = Nothing
+parseR (x : xs) stack = case parse x of
+  Just a -> parseR xs (Lit a : stack)
+  Nothing -> case parse x of
+    Just op -> case stack of
+      (a : b : bs) -> parseR xs (BinOp op b a : bs)
+      _ -> Nothing
+    Nothing -> parseR xs (Var x : stack)
+
 
 -- * Evaluation
 
@@ -51,6 +70,10 @@ class Eval a op where
   -- | Evaluates given binary operation with provided arguments
   evalBinOp :: op -> a -> a -> a
 
+instance Eval Integer IntOp where
+  evalBinOp Add a b = a + b
+  evalBinOp Mul a b = a * b
+  evalBinOp Sub a b = a - b
 -- | Evaluates given 'Expr' using given association list of variable values
 --
 -- Returns 'Nothing' in case appropriate variable value is missing.
@@ -65,7 +88,16 @@ class Eval a op where
 -- Nothing
 --
 evalExpr :: (Eval a op) => [(String, a)] -> Expr a op -> Maybe a
-evalExpr = error "TODO: define evalExpr"
+evalExpr _ (Lit x) = Just x
+evalExpr env (Var x) = lookup x env
+evalExpr env (BinOp f expr1 expr2) = 
+  case (evalExpr1, evalExpr2) of
+    (Just val1, Just val2) -> Just (evalBinOp f val1 val2)
+    (_, _) -> Nothing
+  where 
+    evalExpr1 = evalExpr env expr1
+    evalExpr2 = evalExpr env expr2
+
 
 -- | Parses given integer expression in Reverse Polish Notation and evaluates it
 -- using given association list of variable values
@@ -89,7 +121,7 @@ evalExpr = error "TODO: define evalExpr"
 -- Nothing
 --
 evaluateInteger :: [(String, Integer)] -> String -> Maybe Integer
-evaluateInteger = error "TODO: define evaluateInteger"
+evaluateInteger = evaluate reifyInteger
 
 -- | Parses given expression in Reverse Polish Notation and evaluates it
 -- using given association list of variable values
@@ -102,7 +134,7 @@ evaluateInteger = error "TODO: define evaluateInteger"
 --
 evaluate :: (Eval a op, Parse a, Parse op) => Reify a op -> [(String, a)] -> String -> Maybe a
 evaluate reify m s = case parse s of
-  Just e -> evalExpr m (reify e)
+  Just e  -> evalExpr m (reify e)
   Nothing -> Nothing
 
 -- * Helpers
